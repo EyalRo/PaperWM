@@ -7,7 +7,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PointerWatcher from 'resource:///org/gnome/shell/ui/pointerWatcher.js';
 
-import { Settings, Utils, Tiling, Navigator, Grab, Scratch } from './imports.js';
+import { Settings, Utils, Tiling, Grab, Scratch } from './imports.js';
 
 /*
   The stack overlay decorates the top stacked window with its icon and
@@ -44,6 +44,7 @@ import { Settings, Utils, Tiling, Navigator, Grab, Scratch } from './imports.js'
 */
 
 let pointerWatch;
+// eslint-disable-next-line no-unused-vars
 export function enable(extension) {
 
 }
@@ -80,6 +81,7 @@ export function enableMultimonitorSupport() {
             // check if in the midst of a window resize action
             if (Tiling.inGrab &&
                 Tiling.inGrab instanceof Grab.ResizeGrab) {
+                // eslint-disable-next-line no-undef
                 const window = global.display?.focus_window;
                 if (window) {
                     Scratch.makeScratch(window);
@@ -177,6 +179,8 @@ export class StackOverlay {
         overlay.height = this.monitor.height - panelBox.height - Settings.prefs.vertical_margin;
         overlay.width = Tiling.stack_margin;
 
+        // setup barrier
+
         this.signals = new Utils.Signals();
 
         this.triggerPreviewTimeout = null;
@@ -188,6 +192,7 @@ export class StackOverlay {
             this.removePreview();
             this.triggerPreviewTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
                 // if pointer is still at edge (within 2px), trigger preview
+                // eslint-disable-next-line no-undef, no-unused-vars
                 let [x, y, mask] = global.get_pointer();
                 if (x <= 2 || x >= this.monitor.width - 2) {
                     this.triggerPreview.bind(this)();
@@ -200,6 +205,7 @@ export class StackOverlay {
         this.signals.connect(overlay, 'enter-event', this.triggerPreview.bind(this));
         this.signals.connect(overlay, 'leave-event', this.removePreview.bind(this));
 
+        // eslint-disable-next-line no-undef
         global.window_group.add_child(overlay);
         Main.layoutManager.trackChrome(overlay);
 
@@ -250,6 +256,7 @@ export class StackOverlay {
      * Shows the window preview in from the side it was triggered on.
      */
     showPreview() {
+        // eslint-disable-next-line no-undef, no-unused-vars
         let [x, y, mask] = global.get_pointer();
         let actor = this.target.get_compositor_private();
         let clone = new Clutter.Clone({ source: actor });
@@ -301,6 +308,7 @@ export class StackOverlay {
             return bail();
         }
 
+        // eslint-disable-next-line no-undef
         let mru = global.display.get_tab_list(Meta.TabList.NORMAL_ALL,
             space.workspace);
         let column = space[index];
@@ -318,6 +326,7 @@ export class StackOverlay {
         if (this._direction === Meta.MotionDirection.LEFT) {
             let column = space[space.indexOf(metaWindow) + 1];
             let neighbour = column &&
+                // eslint-disable-next-line no-undef
                 global.display.sort_windows_by_stacking(column).reverse()[0];
 
             if (!neighbour)
@@ -332,6 +341,7 @@ export class StackOverlay {
         } else {
             let column = space[space.indexOf(metaWindow) - 1];
             let neighbour = column &&
+                // eslint-disable-next-line no-undef
                 global.display.sort_windows_by_stacking(column).reverse()[0];
             if (!neighbour)
                 return bail(); // Should normally have a neighbour. Bail!
