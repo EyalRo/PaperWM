@@ -5,6 +5,7 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as Layout from 'resource:///org/gnome/shell/ui/layout.js';
 import * as PointerWatcher from 'resource:///org/gnome/shell/ui/pointerWatcher.js';
 
 import { Settings, Utils, Tiling, Grab, Scratch } from './imports.js';
@@ -178,32 +179,50 @@ export class StackOverlay {
         overlay.y = monitor.y + panelBox.height + Settings.prefs.vertical_margin;
         overlay.height = this.monitor.height - panelBox.height - Settings.prefs.vertical_margin;
         overlay.width = Tiling.stack_margin;
+        this.overlay = overlay;
 
-        // setup barrier
+        // setup pressure barrier
+        this._pressureBarrier = new Layout.PressureBarrier(
+            100, // pressure threshold (pixels)
+            100, // pressure timeout (ms)
+            Shell.ActionMode.NORMAL);
+        this._pressureBarrier.connect('trigger', () => {
+            // if put pressure on barrier, activate window
+            if (Settings.prefs.edge_preview_scale > 0) {
+                Main.activateWindow(this.target);
+            }
+            this._enableBarrier();
+        });
+
+        this.triggerValidCheck;
 
         this.signals = new Utils.Signals();
 
         this.triggerPreviewTimeout = null;
-        this.signals.connect(overlay, 'button-press-event', () => {
-            if (Settings.prefs.edge_preview_scale > 0) {
-                Main.activateWindow(this.target);
-            }
-            // remove/cleanup the previous preview
-            this.removePreview();
-            this.triggerPreviewTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
-                // if pointer is still at edge (within 2px), trigger preview
-                // eslint-disable-next-line no-undef, no-unused-vars
-                let [x, y, mask] = global.get_pointer();
-                if (x <= 2 || x >= this.monitor.width - 2) {
-                    this.triggerPreview.bind(this)();
-                }
-                this.triggerPreviewTimeout = null;
-                return false; // on return false destroys timeout
-            });
-        });
+        // this.signals.connect(overlay, 'button-press-event', () => {
+        //     if (Settings.prefs.edge_preview_scale > 0) {
+        //         Main.activateWindow(this.target);
+        //     }
+        //     // remove/cleanup the previous preview
+        //     this.removePreview();
+        //     this.triggerPreviewTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
+        //         // if pointer is still at edge (within 2px), trigger preview
+        //         // eslint-disable-next-line no-undef, no-unused-vars
+        //         let [x, y, mask] = global.get_pointer();
+        //         if (x <= 2 || x >= this.monitor.width - 2) {
+        //             this.triggerPreview.bind(this)();
+        //         }
+        //         this.triggerPreviewTimeout = null;
+        //         return false; // on return false destroys timeout
+        //     });
+        // });
 
-        this.signals.connect(overlay, 'enter-event', this.triggerPreview.bind(this));
-        this.signals.connect(overlay, 'leave-event', this.removePreview.bind(this));
+        this.signals.connect(overlay, 'enter-event', () => {
+            // show the preview and enable barrier (for pushing)
+            this.triggerPreview();
+            this._enableBarrier();
+        });
+        // this.signals.connect(overlay, 'leave-event', this.removePreview.bind(this));
 
         // eslint-disable-next-line no-undef
         global.window_group.add_child(overlay);
@@ -213,18 +232,75 @@ export class StackOverlay {
         this.setTarget(null);
     }
 
+    /**
+     * Once barrier has been triggered, we need to disable the barrier to allow global pointer check.
+     */
+    _enableBarrier(enable = true) {
+        if (this._verticalBarrier) {
+            this.signals?.disconnect(this._verticalBarrier);
+            this._pressureBarrier.removeBarrier(this._verticalBarrier);
+            this._verticalBarrier.destroy();
+            this._verticalBarrier = null;
+        }
+
+        if (enable) {
+            this._verticalBarrier = new Meta.Barrier({
+                // eslint-disable-next-line no-undef
+                backend: global.backend,
+                x1: this.monitor.x, x2: this.monitor.x, y1: this.overlay.y, y2: this.overlay.y + this.overlay.height,
+                directions: this._direction === Meta.MotionDirection.LEFT
+                    ? Meta.BarrierDirection.POSITIVE_X
+                    : Meta.BarrierDirection.NEGATIVE_X,
+            });
+
+            this.signals.connect(this._verticalBarrier, 'hit', () => {
+                console.log(`hit barrier`);
+            });
+
+            this.signals.connect(this._verticalBarrier, 'left', () => {
+                console.log(`left barrier`);
+                this._enableBarrier(false);
+            });
+
+            this._pressureBarrier.addBarrier(this._verticalBarrier);
+        }
+    }
+
     triggerPreview() {
-        if ("_previewId" in this)
+        if (this.triggerValidCheck)
             return;
+        // if ("_previewId" in this)
+        //     return;
         if (!this.target)
             return;
-        this._previewId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
-            delete this._previewId;
-            this.removePreview();
-            this.showPreview();
-            this._previewId = null;
-            return false; // on return false destroys timeout
-        });
+        // this._previewId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 0, () => {
+        //     delete this._previewId;
+        //     this.removePreview();
+        //     this.showPreview();
+        //     this._previewId = null;
+        //     return false; // on return false destroys timeout
+        // });
+
+        delete this._previewId;
+        this.showPreview();
+        this._previewId = null;
+
+        // setup pointerwatcher to remove barrier if mouse strays too far
+        this.triggerValidCheck = PointerWatcher.getPointerWatcher().addWatch(100,
+            (gx, gy) => {
+                // if pointer is still at edge (within 2px), trigger preview
+                console.log(gx, gy);
+                // if within bound schedule next check
+                if (gx <= 2 || gx >= this.monitor.width - 2) {
+                    return true;
+                }
+                else {
+                    // destroy this validity check
+                    this.removePreview();
+                    this._enableBarrier();
+                    return false; // on return false destroys timeout
+                }
+            });
 
         // uncomment to remove the preview after a timeout
         /*
@@ -237,15 +313,17 @@ export class StackOverlay {
     }
 
     removePreview() {
-        if ("_previewId" in this) {
-            Utils.timeout_remove(this._previewId);
-            delete this._previewId;
-        }
-        if ("_removeId" in this) {
-            Utils.timeout_remove(this._removeId);
-            delete this._removeId;
-        }
+        // if ("_previewId" in this) {
+        //     Utils.timeout_remove(this._previewId);
+        //     delete this._previewId;
+        // }
+        // if ("_removeId" in this) {
+        //     Utils.timeout_remove(this._removeId);
+        //     delete this._removeId;
+        // }
 
+        this.triggerValidCheck?.remove();
+        this.triggerValidCheck = null;
         if (this.clone) {
             this.clone.destroy();
             this.clone = null;
@@ -258,8 +336,8 @@ export class StackOverlay {
     showPreview() {
         // eslint-disable-next-line no-undef, no-unused-vars
         let [x, y, mask] = global.get_pointer();
-        let actor = this.target.get_compositor_private();
-        let clone = new Clutter.Clone({ source: actor });
+        const actor = this.target.get_compositor_private();
+        const clone = new Clutter.Clone({ source: actor });
         this.clone = clone;
 
         // Remove any window clips, and show the metaWindow.clone's
@@ -368,6 +446,9 @@ export class StackOverlay {
     destroy() {
         Utils.timeout_remove(this.triggerPreviewTimeout);
         this.triggerPreviewTimeout = null;
+
+        Utils.timeout_remove(this.triggerValidCheck);
+        this.triggerValidCheck = null;
 
         this.signals.destroy();
         this.signals = null;
