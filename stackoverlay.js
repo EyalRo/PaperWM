@@ -7,7 +7,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PointerWatcher from 'resource:///org/gnome/shell/ui/pointerWatcher.js';
 
-import { Settings, Utils, Tiling, Navigator, Grab, Scratch } from './imports.js';
+import { Settings, Utils, Tiling, Grab, Scratch } from './imports.js';
 
 /*
   The stack overlay decorates the top stacked window with its icon and
@@ -44,6 +44,7 @@ import { Settings, Utils, Tiling, Navigator, Grab, Scratch } from './imports.js'
 */
 
 let pointerWatch;
+// eslint-disable-next-line no-unused-vars
 export function enable(extension) {
 
 }
@@ -80,6 +81,7 @@ export function enableMultimonitorSupport() {
             // check if in the midst of a window resize action
             if (Tiling.inGrab &&
                 Tiling.inGrab instanceof Grab.ResizeGrab) {
+                // eslint-disable-next-line no-undef
                 const window = global.display?.focus_window;
                 if (window) {
                     Scratch.makeScratch(window);
@@ -188,9 +190,11 @@ export class StackOverlay {
             this.removePreview();
             this.triggerPreviewTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
                 // if pointer is still at edge (within 2px), trigger preview
+                // eslint-disable-next-line no-undef, no-unused-vars
                 let [x, y, mask] = global.get_pointer();
+                console.log(`after click ${x} ${y}`);
                 if (x <= 2 || x >= this.monitor.width - 2) {
-                    this.triggerPreview.bind(this)();
+                    this.showPreview();
                 }
                 this.triggerPreviewTimeout = null;
                 return false; // on return false destroys timeout
@@ -198,8 +202,9 @@ export class StackOverlay {
         });
 
         this.signals.connect(overlay, 'enter-event', this.triggerPreview.bind(this));
-        this.signals.connect(overlay, 'leave-event', this.removePreview.bind(this));
+        // this.signals.connect(overlay, 'leave-event', this.removePreview.bind(this));
 
+        // eslint-disable-next-line no-undef
         global.window_group.add_child(overlay);
         Main.layoutManager.trackChrome(overlay);
 
@@ -208,48 +213,48 @@ export class StackOverlay {
     }
 
     triggerPreview() {
-        if ("_previewId" in this)
+        if (this.triggerValidCheck) {
             return;
-        if (!this.target)
+        }
+        if ("_previewId" in this) {
             return;
+        }
+
+        if (!this.target) {
+            return;
+        }
+
+        console.log(`after click got here?`);
         this._previewId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
             delete this._previewId;
-            this.removePreview();
+            // this.removePreview();
             this.showPreview();
+
             this._previewId = null;
             return false; // on return false destroys timeout
         });
-
-        // uncomment to remove the preview after a timeout
-        /*
-        this._removeId = Mainloop.timeout_add_seconds(2, () => {
-            this.removePreview();
-            this._removeId = null;
-            return false; // on return false destroys timeout
-        });
-        */
     }
 
     removePreview() {
-        if ("_previewId" in this) {
+        if (this._previewId) {
             Utils.timeout_remove(this._previewId);
             delete this._previewId;
         }
-        if ("_removeId" in this) {
-            Utils.timeout_remove(this._removeId);
-            delete this._removeId;
-        }
 
-        if (this.clone) {
-            this.clone.destroy();
-            this.clone = null;
-        }
+        // destroy any this validity check
+        this.triggerValidCheck?.remove();
+        this.triggerValidCheck = null;
+
+        this.clone?.destroy();
+        this.clone = null;
     }
 
     /**
      * Shows the window preview in from the side it was triggered on.
      */
     showPreview() {
+        console.log(`showPreview`);
+        // eslint-disable-next-line no-undef, no-unused-vars
         let [x, y, mask] = global.get_pointer();
         let actor = this.target.get_compositor_private();
         let clone = new Clutter.Clone({ source: actor });
@@ -285,11 +290,26 @@ export class StackOverlay {
         y = Math.min(y, workArea.y + workArea.height - scaleHeight);
 
         clone.set_position(x, y);
+
+        // setup pointerwatcher to remove barrier if mouse strays too far
+        this.triggerValidCheck = PointerWatcher.getPointerWatcher().addWatch(100,
+            (gx, gy) => {
+                // if pointer is still at edge (within 2px), trigger preview
+                console.log(gx, gy);
+
+                // if within bound schedule next check
+                if (gx <= 2 || gx >= this.monitor.width - 2) {
+                    return true;
+                }
+                else {
+                    console.log(`removed by check`);
+                    this.removePreview();
+                    return false; // on return false destroys timeout
+                }
+            });
     }
 
     setTarget(space, index) {
-        this.removePreview();
-
         let bail = () => {
             this.target = null;
             this.overlay.width = 0;
@@ -301,6 +321,7 @@ export class StackOverlay {
             return bail();
         }
 
+        // eslint-disable-next-line no-undef
         let mru = global.display.get_tab_list(Meta.TabList.NORMAL_ALL,
             space.workspace);
         let column = space[index];
@@ -318,6 +339,7 @@ export class StackOverlay {
         if (this._direction === Meta.MotionDirection.LEFT) {
             let column = space[space.indexOf(metaWindow) + 1];
             let neighbour = column &&
+                // eslint-disable-next-line no-undef
                 global.display.sort_windows_by_stacking(column).reverse()[0];
 
             if (!neighbour)
@@ -332,6 +354,7 @@ export class StackOverlay {
         } else {
             let column = space[space.indexOf(metaWindow) - 1];
             let neighbour = column &&
+                // eslint-disable-next-line no-undef
                 global.display.sort_windows_by_stacking(column).reverse()[0];
             if (!neighbour)
                 return bail(); // Should normally have a neighbour. Bail!
